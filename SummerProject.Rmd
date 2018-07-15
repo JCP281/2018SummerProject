@@ -1,0 +1,32 @@
+---
+title: "Summer Project"
+author: "Robert “MOS” Steele"
+date: "July 14, 2018"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+Accidents0515 <- read.csv('Accidents0515.csv')
+Casualties0515 <- read.csv('Casualties0515.csv')
+Vehicles0515 <- read.csv('Vehicles0515.csv')
+
+glimpse(Accidents0515)
+glimpse(Casualties0515)
+glimpse(Vehicles0515)
+summary(Accidents0515)
+summary(Casualties0515)
+summary(Vehicles0515)
+```
+
+```{r}
+library(sqldf)
+sqldf("SELECT *
+      FROM Accidents0515 a
+      INNER JOIN Casualties0515 c ON c.Accident_Index = a.Accident_Index
+      INNER JOIN Vehicles0515 v ON v.Accident_Index = c.Accident_Index")
+```
+
