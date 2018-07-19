@@ -7,19 +7,55 @@ output: word_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+memory.limit(size = 1000000000)
 ```
 
 ```{r}
+#install.packages(c('caret','imputeR'))
+library(imputeR)
 Accidents0515 <- read.csv('Accidents0515.csv')
-Casualties0515 <- read.csv('Casualties0515.csv')
-Vehicles0515 <- read.csv('Vehicles0515.csv')
+Accidents0515 = Accidents0515[ , -c(16,22)]  #Removed the street numbers from the data set. I dont feel that this is relevant to anything.
 
-glimpse(Accidents0515)
-glimpse(Casualties0515)
-glimpse(Vehicles0515)
+wreckHour = as.character(Accidents0515$Time)
+Time_of_Accident = sapply(strsplit(wreckHour,':'), function(x){
+                                                                x = as.numeric(x)
+                                                                x[1]+x[2]/60
+                                                               }
+                         )
+Accidents0515 = cbind(Accidents0515,Time_of_Accident)
+Accidents0515 = Accidents0515[ , -12]  #Removed old time column that is now converted to numeric as Time_of_Accident
 summary(Accidents0515)
-summary(Casualties0515)
-summary(Vehicles0515)
+guessImpute = Accidents0515[ , c(17,20,21,23,24,25,26,28,30)]
+summary(guessImpute)
+###################
+#Do the modeling for Junction_Control and X2nd_Road_Class BEFORE the guess imputation
+
+#testImp =  imputeR::stepForC(x = Accidents0515[ , -18], y = Accidents0515[ , 18]) #Too much ram req. Can run these
+        
+    
+
+
+
+
+###################
+
+
+guessImputeCat = imputeR::guess(x = guessImpute[ , -9], type = 'majority' ) #Quick imputation for all categorical variables not missing more than a tiny % of overall data
+guessImputeCon = imputeR::guess(x = guessImpute[ , 9], type = 'median' )    #Quick imputation for all continuous variables not missing more than a tiny % of overall data
+
+Accidents0515 = cbind(Accidents0515, guessImputeCat)        #Binding on the newly imputed values that were categorical
+Accidents0515 = cbind(Accidents0515, guessImputeCon)        #Binding on the newly imputed values that were continuous
+Accidents0515 = Accidents0515[ , -c(17,20,21,23,24,25,26,28,30) ]
+colnames(Accidents0515)[30] <- 'Time_of_Accident'
+
+
+#Casualties0515 <- read.csv('Casualties0515.csv')
+#Vehicles0515 <- read.csv('Vehicles0515.csv')
+
+
+
+
+
 ```
 
 ```{r}
