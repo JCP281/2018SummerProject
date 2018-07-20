@@ -1,19 +1,21 @@
 ---
 title: "Summer Project"
-author: "Robert “MOS” Steele"
+author: "Robert Steele, Patrick Magnusson, James Perry"
 date: "July 14, 2018"
 output: word_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-memory.limit(size = 1000000000)
+memory.limit(size = 100000)
 ```
 
 ```{r}
 #install.packages(c('caret','imputeR'))
 library(imputeR)
-Accidents0515 <- read.csv('Accidents0515.csv')
+library(dplyr)
+
+Accidents0515 = read.csv('Accidents0515.csv')
 Accidents0515 = Accidents0515[ , -c(16,22)]  #Removed the street numbers from the data set. I dont feel that this is relevant to anything.
 
 wreckHour = as.character(Accidents0515$Time)
@@ -24,17 +26,45 @@ Time_of_Accident = sapply(strsplit(wreckHour,':'), function(x){
                          )
 Accidents0515 = cbind(Accidents0515,Time_of_Accident)
 Accidents0515 = Accidents0515[ , -12]  #Removed old time column that is now converted to numeric as Time_of_Accident
+
+
 summary(Accidents0515)
+dim(Accidents0515)
+
+hist(Accidents0515$X2nd_Road_Class)
 guessImpute = Accidents0515[ , c(17,20,21,23,24,25,26,28,30)]
 summary(guessImpute)
 ###################
 #Do the modeling for Junction_Control and X2nd_Road_Class BEFORE the guess imputation
 
-#testImp =  imputeR::stepForC(x = Accidents0515[ , -18], y = Accidents0515[ , 18]) #Too much ram req. Can run these
-        
-    
+#counts by distinct values for X2nd_Road_Class
+x2Counts = Accidents0515 %>% 
+            group_by(Accidents0515$X2nd_Road_Class) %>% 
+            summarize(count = n()) %>%
+            mutate(percTotal = count / sum(count))
 
+#Getting the total of data points for all NON missing data
+Total = x2Counts$count[1] +x2Counts$count[2] +x2Counts$count[3] +x2Counts$count[4] +x2Counts$count[5] +x2Counts$count[6]
+Category_choice =c(1,2,3,4,5,6)
+Percentage_of_Data=
+                            c(x2Counts$count[1] / Total,
+                              x2Counts$count[2] / Total,
+                              x2Counts$count[3] / Total,
+                              x2Counts$count[4] / Total,
+                              x2Counts$count[5] / Total,
+                              x2Counts$count[6] / Total)
+Percentagesofx2 =data.frame(Category_choice,Percentage_of_Data )
+sum(ceiling(732871*Percentage_of_Data)) 
 
+#converting all NA's to 0, as that is a classifyer when no crossroad of the accident is available. We noticed that anytime another field is present that indicates the existance of a cross streer is 0, X2nd_Road_Class was NA. We confirmed this by looking also at the street numbers for the cross street and those were 0 as well. We are 100% confident that imputing 0 is the correct value for this field
+Accidents0515$X2nd_Road_Class[is.na(Accidents0515$X2nd_Road_Class)] <- 0
+
+#Showing post imputation distibutions
+x2CountsPOST = Accidents0515 %>% 
+            group_by(Accidents0515$X2nd_Road_Class) %>% 
+            summarize(count = n()) %>%
+            mutate(percTotal = count / sum(count))
+x2CountsPOST
 
 
 ###################
@@ -47,10 +77,11 @@ Accidents0515 = cbind(Accidents0515, guessImputeCat)        #Binding on the newl
 Accidents0515 = cbind(Accidents0515, guessImputeCon)        #Binding on the newly imputed values that were continuous
 Accidents0515 = Accidents0515[ , -c(17,20,21,23,24,25,26,28,30) ]
 colnames(Accidents0515)[30] <- 'Time_of_Accident'
+summary(Accidents0515)
 
 
-#Casualties0515 <- read.csv('Casualties0515.csv')
-#Vehicles0515 <- read.csv('Vehicles0515.csv')
+# Write CSV in R
+write.csv(Accidents0515, file = "ImputedAccident0515Data.csv")
 
 
 
