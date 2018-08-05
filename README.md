@@ -3,4 +3,4 @@
 
 The goal of this project was to use predictive modeling to estimate average yearly accident frequency for a given road using the characteristics of the accidents which occurred there, the environment at that time, and the characteristics of the road itself.
 
-Models tested: _____
+Models tested: Poisson, Negative Binomial, OLS Regression, Penalized Linear Regression (glmnet), Decision Tree, Random Forest
