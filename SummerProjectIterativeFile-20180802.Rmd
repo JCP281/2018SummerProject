@@ -1,0 +1,155 @@
+---
+title: "Summer Project"
+author: "Robert “MOS” Steele"
+date: "July 14, 2018"
+output: 
+  word_document:
+    reference_docx: /Users/MOS/Documents/R Studio/mystyles.docx
+    fig_width: 5
+    fig_height: 5
+    fig_caption: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# memory.limit(size = 1000000000)
+```
+
+-Testing section
+
+```{r, echo=FALSE, message=FALSE}
+# Load necessary libraries
+
+library(dplyr)
+library(lubridate)
+library(MASS)
+library(sqldf)
+library(caret)
+library(glmnet)
+library(arm)  # Allows printing stdErr from summary
+library(AER)  # For dispersiontest fn
+library(glmnetUtils)
+
+# setwd("~/Documents/GitHub/2018SummerProject")
+# setwd("~/Personal/Education/Summer2018/Project")
+```
+
+```{r "Raw Data"}
+raw.data <- read.csv('Accidents0515.csv')
+summary(raw.data)
+```
+
+```{r "Test Data"}
+# Read in training and test data
+data <- read.csv('training_data.csv')
+```
+
+```{r "Data Cleaning"}
+# Remove first 5 columns (rowindex and location predictors with missing values)
+data <- data[,-c(1:6,10,12:15,18,21:25,27:31)]
+
+# Set values
+data$Accident_Severity[data$Accident_Severity == 3] <- 2
+data$Day_of_Week[data$Day_of_Week < 6] <- 2
+data$Day_of_Week[data$Day_of_Week != 2] <- 1
+data$Road_Type[data$Road_Type != 1] <- 2
+data$Road_Type[data$Road_Type > 7] <- 2
+data$Speed_limit[data$Speed_limit == 30] <- 1
+data$Speed_limit[data$Speed_limit != 1] <- 2
+data$Light_Conditions[data$Light_Conditions != 1] <- 2
+data$Urban_or_Rural_Area[data$Urban_or_Rural_Area != 1] <- 2
+data$Road_Surface_Conditions[data$Road_Surface_Conditions != 1] <- 2
+
+# Coerce columns to correct datatypes (since the csv file does not preserve the datatypes)
+cols <- c(1,4:9)
+data[cols] <- lapply(data[cols], factor)
+```
+
+```{r}
+# Randomly order data
+set.seed(123)
+data = sample_n(data, 500000)
+
+# Determine row to split on: split
+Training = createDataPartition(data[, 10], p = .7, list = FALSE)
+train = data[Training,]
+test = data[-Training,]
+Response = as.data.frame(train[,10])
+```
+
+--What does our data look like
+
+```{r}
+hist(data$Average_Accidents_Per_Year, main = 'Average Accidents per Year', xlab = '')
+```
+
+-Models
+
+```{r Poission}
+pois.model <- glm(
+  Average_Accidents_Per_Year ~ .
+  ,data = train
+  ,family = "poisson"
+)
+
+pois.yhat.test <- predict(pois.model, test)
+print('RMSE - Poisson Model')
+RMSE(test$Average_Accidents_Per_Year, pois.yhat.test)
+```
+
+```{r}
+print('Test for dispersion')
+dispersiontest(pois.model)
+dispersiontest(pois.model, trafo = 2)
+mean(train$Average_Accidents_Per_Year)
+var(train$Average_Accidents_Per_Year)
+```
+
+```{r "Negative Binomial"}
+nb.model <- glm.nb(
+  Average_Accidents_Per_Year ~ .
+  ,data = train
+  ,link = "log"
+  )
+
+nb.yhat.test <- predict(nb.model, test)
+print('RMSE - Negative Binomial Model')
+RMSE(test$Average_Accidents_Per_Year, nb.yhat.test)
+```
+```{r "Quasi-Poisson"}
+quasi.model <- glm(
+  Average_Accidents_Per_Year ~ .
+  ,data = train
+  ,family = "quasipoisson"
+  )
+
+quasi.yhat.test <- predict(quasi.model, test)
+print('RMSE - Quasi_Poisson Model')
+RMSE(test$Average_Accidents_Per_Year, quasi.yhat.test)
+```
+
+glmnet.model <- cva.glmnet(
+  Average_Accidents_Per_Year ~ .
+  ,data = train
+  ,alpha = seq(0, 1, 0.5)
+  ,family = "poisson"
+  )
+
+glmnet.yhat.ridge <- predict(glmnet.model, test, alpha = 0)
+glmnet.yhat.lasso <- predict(glmnet.model, test, alpha = 1)
+glmnet.yhat.elnet <- predict(glmnet.model, test, alpha = 0.5)
+print('RMSE - GLMNet using Ridge')
+RMSE(test$Average_Accidents_Per_Year, glmnet.yhat.ridge)
+print('RMSE - GLMNet using LASSO')
+RMSE(test$Average_Accidents_Per_Year, glmnet.yhat.lasso)
+print('RMSE - GLMNet using Elastinet')
+RMSE(test$Average_Accidents_Per_Year, glmnet.yhat.elnet)
+
+```{r}
+coef.quasi <- coef(quasi.model)
+se.quasi <- se.coef(quasi.model)
+coef.nb <- coef(nb.model)
+se.nb <- summary(nb.model)$coefficients[,2]
+cbind(coef.quasi, coef.nb, se.quasi, se.nb)
+```
+
