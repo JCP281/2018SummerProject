@@ -14,7 +14,9 @@ require(rgdal)
 require(spdplyr)
 
 # Create Coordinartes only data frame
-setwd("C:/Users/Patrick Magnusson/Desktop/2018SummerProject")
+
+#setwd("C:/Users/Patrick Magnusson/Desktop/2018SummerProject")
+setwd("C:/Users/patri/Desktop/2018SummerProject/Repository/Mapping")
 
 acc = read.csv(file="AccidentDataFinal.csv",header=T)
 
@@ -22,12 +24,13 @@ acc$Accident_Index = acc[,1]
 acc = acc[,-1]
 
 coordinates = acc[,c("Accident_Index","Longitude","Latitude")]
-write.csv(x = coordinates, file = "Mapping/coordinates2.csv")
+write.csv(x = coordinates, file = "coordinates2.csv")
 
 
 # Load Shapefile (see sources below)
 
-setwd("C:/Users/Patrick Magnusson/Desktop/2018SummerProject/Mapping")
+#setwd("C:/Users/Patrick Magnusson/Desktop/2018SummerProject/Mapping")
+
 uk_county_coord = readOGR(dsn = "Shapefile",
                         layer="English Ceremonial Counties")     
 # updated previous Shapefile, which was missing Cornwall, Isle of Man, and Northumberland 
@@ -67,11 +70,22 @@ accCounty = sqldf("SELECT a.*, b.County
                   ON a.Accident_Index = b.Accident_Index")
 accCounty$County = as.factor(accCounty$County)
 summary(accCounty$County) # lots of NAs, due to Scotland not being included in govt Shapefile. Can only use England Counties
-
 accCounty = subset(accCounty, is.na(accCounty$County)==FALSE)
-#write.csv(x=accCounty, file="Accident_Data_Final_w_County.csv")
+accCounty = subset(accCounty, X1st_Road_Number != 0)
+write.csv(x=accCounty, file="Accident_Data_Final_w_County.csv")
 
 
+# Metrics Table
+avg = sqldf("SELECT DISTINCT County, X1st_Road_Number as Road, Average_Accidents_Per_Year
+                FROM accCounty ORDER BY County, Road")
+write.csv(x = avg, file="avgCountyRoad.csv")
+
+
+metrics = sqldf("SELECT County, X1st_Road_Number as Road, Number_of_Casualties, Road_Type, Speed_limit, Light_Conditions,
+               Junction_Detail, Junction_Control_Imputed as Junction_Control,
+               Weather_Conditions, Road_Surface_Conditions, Time_of_Accident
+               FROM accCounty")
+write.csv(x = metrics, file="metricsCountyRoad.csv")
 
 
 
