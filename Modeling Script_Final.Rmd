@@ -1,0 +1,209 @@
+---
+title: "Modeling Script"
+author: "James Perry, Robert Steele, Patrick Magnusson"
+date: "July 26, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+memory.limit(size = 100000)
+data = read.csv('AccidentDataFinalBINNED.csv')
+data = data[ , 2:11]
+head(data)
+
+hist(data$USE_Average_Accidents_Per_Year)
+hist(data$USE_Accident_Severity)
+hist(data$USE_Number_of_Vehicles)
+hist(data$USE_Number_of_Casualties)
+hist(data$USE_Road_Surface_Conditions)
+hist(data$USE_Road_Type)
+hist(data$USE_Light_Conditions)
+hist(data$USE_Urban_or_Rural_Area)
+hist(data$USE_Speed_limit)
+hist(data$USE_Day_of_Week)
+
+```
+
+
+
+```{r Training_Set}
+#Splitting Data and modeling
+library(caret)
+library(dplyr)
+set.seed(123)
+# Shuffle row indices: rows
+rows <- sample(nrow(data))
+# Randomly order data
+data <- data[rows, ]
+set.seed(123)
+data = sample_n(data, 100000)
+
+# Determine row to split on: split
+set.seed(123)
+Training = createDataPartition(data[, 10], p = .7, list = FALSE)
+train = data[Training,]
+test = data[-Training,]
+Response = as.data.frame(train[,10])
+
+head(train)
+
+
+#Logic to transform to factors
+cols = c(1,4,5,6,7,8,9) #no Time, that to me is 100% continuous 
+train[cols] <- lapply(train[cols], factor)
+sapply(train, class)
+#names(train)
+head(train)
+#summary(train)
+
+
+
+#Logic to transform to factors in test
+cols = c(1,4,5,6,7,8,9) #no Time, that to me is 100% continuous 
+test[cols] <- lapply(test[cols], factor)
+sapply(test, class)
+
+
+
+#Setting up resampling method
+fitControl <- trainControl(
+  ## Repeated 5-fold CV 
+  method = "repeatedcv",
+  number = 10,
+  ## repeated 10 times
+  repeats = 5,
+  verboseIter = TRUE,
+  returnResamp = "all"
+  ,classProbs = FALSE)
+
+```
+
+```{r James}
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+
+#Linear Model (Should be the simplest, expecting bad results)
+set.seed(123)
+LM = caret::train(x = train[,1:9], y = train$USE_Average_Accidents_Per_Year,  method = 'lm',trControl = fitControl)
+LMPred = predict(LM,newdata = test)
+print('RMSE - Linear Model')
+RMSE(test$USE_Average_Accidents_Per_Year,LMPred)
+plot(varImp(LM),main = 'Linear Model Variable Importance')
+summary(LM)
+
+
+#Random Forest model (Should be the best model in terms of RMSE)
+set.seed(123)
+rrfFit <- train(x = train[,1:9], y = train$USE_Average_Accidents_Per_Year,
+                 method = 'ranger',
+                 tuneLength = 3, 
+                 trControl = fitControl,
+                 num.trees = 500
+                ,importance = 'impurity'
+                )
+
+
+RFPred = predict(rrfFit, newdata = test)
+print('RMSE - Linear Model')
+RMSE(test$USE_Average_Accidents_Per_Year, RFPred)
+Residuals = abs(test$USE_Average_Accidents_Per_Year-RFPred)
+RFResiduals = data.frame(RFPred, test$USE_Average_Accidents_Per_Year, Residuals )
+plot(varImp(rrfFit),main = 'Random Forest Model Variable Importance')
+rrfFit$finalModel
+rrfFit$results
+
+#Random Forest Successes
+RF_Results_Residuals = cbind(test, Residuals)
+summary(subset(RF_Results_Residuals, Residuals <= 50)) #considering anythign <=50 accidents to be decent
+summary(test) #total data to compare subset residuals against
+
+
+#Tree Model to see if any better than LM, it is. By 1 RMSE
+set.seed(123)
+TreeModel <- train(x = train[,1:9], y = train$USE_Average_Accidents_Per_Year,
+                 method = 'rpart',
+                # should be set high at least p/3
+                  
+                 trControl = fitControl
+                )
+TreeModel$results
+TreePred = predict(TreeModel, newdata = test)
+print('RMSE - Tree Model')
+RMSE(test$USE_Average_Accidents_Per_Year, TreePred)
+
+
+
+
+```
+
+```{r Robert}
+library(dplyr)
+library(lubridate)
+library(MASS)
+library(sqldf)
+library(caret)
+library(glmnet)
+library(glmnetUtils)
+library(AER)
+
+
+pois.model <- glm(
+  train$USE_Average_Accidents_Per_Year ~ .
+  ,data = train
+  ,family = "poisson"
+)
+
+pois.yhat.test <- predict(pois.model, newdata = test)
+print('RMSE - Poisson Model')
+RMSE(test$USE_Average_Accidents_Per_Year, pois.yhat.test)
+
+
+print('Test for dispersion')
+dispersiontest(pois.model)
+dispersiontest(pois.model, trafo = 2)
+mean(train$USE_Average_Accidents_Per_Year)
+var(train$USE_Average_Accidents_Per_Year)
+
+
+nb.model <- glm.nb(
+  train$USE_Average_Accidents_Per_Year ~ .
+  ,data = train
+  ,link = "log"
+  )
+
+nb.yhat.test <- predict(nb.model, test)
+print('RMSE - Negative Binomial Model')
+RMSE(test$USE_Average_Accidents_Per_Year, nb.yhat.test)
+
+quasi.model <- glm(
+  train$USE_Average_Accidents_Per_Year ~ .
+  ,data = train
+  ,family = "quasipoisson")
+
+  
+quasi.yhat.test <- predict(quasi.model, test)
+print('RMSE - Quasi_Poisson Model')
+RMSE(test$USE_Average_Accidents_Per_Year, quasi.yhat.test)
+
+glmnet.model <- cva.glmnet(
+  USE_Average_Accidents_Per_Year ~ .
+  ,data = train
+  ,alpha = seq(0, 1, 0.5)
+  ,family = "poisson"
+)
+
+
+glmnet.yhat.ridge <- predict(glmnet.model, test, alpha = 0)
+glmnet.yhat.lasso <- predict(glmnet.model, test, alpha = 1)
+glmnet.yhat.elnet <- predict(glmnet.model, test, alpha = 0.5)
+print('RMSE - GLMNet using Ridge')
+RMSE(test$USE_Average_Accidents_Per_Year, glmnet.yhat.ridge)
+
+RMSE(test$USE_Average_Accidents_Per_Year, glmnet.yhat.lasso)
+print('RMSE - GLMNet using Elastinet')
+RMSE(test$USE_Average_Accidents_Per_Year, glmnet.yhat.elnet)
+
+
+```
