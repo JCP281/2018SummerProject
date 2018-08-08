@@ -149,15 +149,21 @@ library(glmnetUtils)
 library(AER)
 
 
-pois.model <- glm(
-  train$USE_Average_Accidents_Per_Year ~ .
+pois.model <- train(
+  USE_Average_Accidents_Per_Year ~ .
   ,data = train
+  ,method = "glm"
   ,family = "poisson"
+  ,trControl = fitControl
 )
 
-pois.yhat.test <- predict(pois.model, newdata = test)
-print('RMSE - Poisson Model')
+# Display variable info
+plot(varImp(pois.model),main = 'Poisson Model Variable Importance')
+
+pois.yhat.test <- predict(pois.model, test)
+print('RMSE - Poisson Model-Test')
 RMSE(test$USE_Average_Accidents_Per_Year, pois.yhat.test)
+summary(pois.model)
 
 
 print('Test for dispersion')
